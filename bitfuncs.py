@@ -3,9 +3,9 @@ def int_to_bits (value, width):
     mask = 1 << (width - 1)
     while mask != 0:
         if value & mask == 0:
-            bits.append (1)
-        else:
             bits.append (0)
+        else:
+            bits.append (1)
         mask >>= 1
     return bits
 
