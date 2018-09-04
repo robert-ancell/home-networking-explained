@@ -1,6 +1,9 @@
 #!/usr/bin/python3
 
+import math
+
 from bitfuncs import *
+from graph import *
 
 def encode_4b5b (data):
     map = [ 0b11110, 0b01001, 0b10100, 0b10101,
@@ -156,32 +159,14 @@ scrambled_packet = scrambler.scramble (encoded_packet)
 signal = encode_mlt_3 (scrambled_packet)
 print (signal)
 
-import cairo
-import math
-
 #pixel_duration = 0.5 # ns
-pixel_duration = 4 # ns
+pixel_duration = 2 # ns
 pulse_duration = 8 # ns
 pulse_width = pulse_duration / pixel_duration
 microsecond_width = 1000 / pixel_duration
 width = math.ceil (len (signal) * pulse_width)
 height = 450
-s = cairo.ImageSurface (cairo.FORMAT_RGB24, width, height)
-c = cairo.Context (s)
-
-# Fill background
-c.set_source_rgb (1.0, 1.0, 1.0)
-c.paint ()
-
-def draw_box (c, x, y, width, height, r, g, b):
-    c.rectangle (x, 0, width, y)
-    c.set_source_rgba (r, g, b, 0.1)
-    c.fill ()
-    c.rectangle (x, y, width, height)
-    c.set_source_rgb (r, g, b)
-    c.fill ()
-    return width
-
+graph = Graph (width, height)
 
 idle_width = 6 * 5 * pulse_width
 ssd_width = 10 * pulse_width
@@ -203,74 +188,24 @@ def rgb (text):
 idle_colour = rgb ('#fce94f')
 framing_colour = rgb ('#c4a000')
 
-x  = draw_box (c, 0, 250, idle_width,      25, *idle_colour)
-x += draw_box (c, x, 250, ssd_width,       25, *framing_colour)
-x += draw_box (c, x, 300, preamble_width,  25, *rgb ('#fcaf3e'))
-x += draw_box (c, x, 300, sfd_width,       25, *rgb ('#f57900'))
-x += draw_box (c, x, 350, d_mac_width,     25, *rgb ('#8ae234'))
-x += draw_box (c, x, 350, s_mac_width,     25, *rgb ('#4e9a06'))
-x += draw_box (c, x, 350, ethertype_width, 25, *rgb ('#ad7fa8'))
-x += draw_box (c, x, 400, payload_width,   25, *rgb ('#729fcf'))
-x += draw_box (c, x, 350, padding_width,   25, *rgb ('#888a85'))
-x += draw_box (c, x, 350, crc_width,       25, *rgb ('#ef2929'))
-x += draw_box (c, x, 250, esd_width,       25, *framing_colour)
-x += draw_box (c, x, 250, idle_width,      25, *idle_colour)
+x  = graph.draw_box (0, 250, idle_width,      25, *idle_colour)
+x += graph.draw_box (x, 250, ssd_width,       25, *framing_colour)
+x += graph.draw_box (x, 300, preamble_width,  25, *rgb ('#fcaf3e'))
+x += graph.draw_box (x, 300, sfd_width,       25, *rgb ('#f57900'))
+x += graph.draw_box (x, 350, d_mac_width,     25, *rgb ('#8ae234'))
+x += graph.draw_box (x, 350, s_mac_width,     25, *rgb ('#4e9a06'))
+x += graph.draw_box (x, 350, ethertype_width, 25, *rgb ('#ad7fa8'))
+x += graph.draw_box (x, 400, payload_width,   25, *rgb ('#729fcf'))
+x += graph.draw_box (x, 350, padding_width,   25, *rgb ('#888a85'))
+x += graph.draw_box (x, 350, crc_width,       25, *rgb ('#ef2929'))
+x += graph.draw_box (x, 250, esd_width,       25, *framing_colour)
+x += graph.draw_box (x, 250, idle_width,      25, *idle_colour)
+graph.draw_timing_lines (microsecond_width)
+graph.draw_signal (pulse_width / 2, 50, signal, pulse_width, 25)
+graph.draw_signal (0, 125, scrambled_packet, pulse_width, 25)
+graph.draw_signal (0, 175, encoded_packet, pulse_width, 25)
+graph.draw_signal (idle_width + ssd_width, 225, packet, slow_pulse_width, 25)
 
-# Draw 1us timing lines
-x = microsecond_width
-c.set_line_width (1.0)
-c.set_source_rgba (0, 0, 0, 0.25)
-while x < width:
-    c.move_to (x + 0.5, 0)
-    c.rel_line_to (0, height)
-    x += microsecond_width
-c.stroke ()
-
-last_level = -1
-def level_to_y (level):
-    return (1 - level) * 25 + 25 + 0.5
-last_y = level_to_y (last_level)
-c.move_to (0, last_y)
-x = 0.5
-for level in signal:
-    y = level_to_y (level)
-    c.line_to (x + pulse_width / 2, last_y)
-    c.line_to (x + pulse_width / 2, y)
-    c.line_to (x + pulse_width, y)
-    last_y = y
-    x += pulse_width
-c.set_source_rgb (0.0, 0.0, 0.0)
-c.set_line_width (1.0)
-c.stroke ()
-
-def render_binary (c, bits, pulse_width, pulse_height):
-    last_bit = bits[0]
-    if last_bit == 1:
-        c.rel_move_to (0, -pulse_height)
-    for bit in bits:
-        if bit != last_bit:
-            c.rel_line_to (0, pulse_height * (last_bit - bit))
-        c.rel_line_to (pulse_width, 0)
-        last_bit = bit
-
-c.move_to (0.5, 125.5)
-render_binary (c, scrambled_packet, pulse_width, 25)
-c.set_source_rgb (0.0, 0.0, 0.0)
-c.set_line_width (1.0)
-c.stroke ()
-
-c.move_to (0.5, 175.5)
-render_binary (c, encoded_packet, pulse_width, 25)
-c.set_source_rgb (0.0, 0.0, 0.0)
-c.set_line_width (1.0)
-c.stroke ()
-
-c.move_to (0.5 + idle_width + ssd_width, 225.5)
-render_binary (c, packet, slow_pulse_width, 25)
-c.set_source_rgb (0.0, 0.0, 0.0)
-c.set_line_width (1.0)
-c.stroke ()
-
-s.write_to_png ('graph.png')
+graph.save ('graph.png')
 
 # 3.3V or 2.8V?
